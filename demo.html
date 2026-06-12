@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>知识库聊天框 Demo</title>
+    <link rel="stylesheet" href="static/prototype.css">
+  </head>
+  <body class="demo-page">
+    <nav class="demo-nav">
+      <strong>XX智能科技有限公司</strong>
+      <a class="btn" href="admin.html#business-line">返回业务线配置</a>
+    </nav>
+    <section class="demo-hero">
+      <h1>企业官网 Demo 页面</h1>
+      <p>专注于大模型、RAG、Agent、AI 应用开发教学与实践。右下角当前嵌入“大模型学习助手”，它只检索该业务线绑定的知识库。</p>
+    </section>
+    <main class="demo-content">
+      <section class="demo-block">
+        <h2>课程知识库</h2>
+        <p>覆盖 RAG、Milvus、LangChain、Embedding、Rerank、Prompt 构造等内容。</p>
+      </section>
+      <section class="demo-block">
+        <h2>项目训练</h2>
+        <p>通过真实业务文档、图片解析和向量检索流程，帮助学习者理解完整 AI 应用开发链路。</p>
+      </section>
+      <section class="demo-block">
+        <h2>常见问题</h2>
+        <p>支持用户围绕课程文档连续提问，聊天框会展示回答、引用片段和相关图片。</p>
+      </section>
+      <section class="demo-block">
+        <h2>嵌入方式</h2>
+        <p>企业网站按页面场景插入对应业务线脚本，例如课程页用大模型学习助手，官网产品页用售前咨询助手。</p>
+      </section>
+    </main>
+    <script
+      src="static/chat-widget.js"
+      data-company-id="default_company"
+      data-business-line-id="business_line_course"
+      data-theme-color="#2563eb"
+    ></script>
+  </body>
+</html>

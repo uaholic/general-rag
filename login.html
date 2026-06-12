@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>登录 - 轻量级企业知识库系统</title>
+    <link rel="stylesheet" href="static/prototype.css">
+  </head>
+  <body>
+    <main class="login-shell">
+      <section class="login-panel">
+        <h1 class="login-title">轻量级企业知识库系统</h1>
+        <p class="login-subtitle">输入管理员暗号进入后台。</p>
+        <form data-login-form>
+          <div class="field">
+            <label for="secret">管理员暗号</label>
+            <input id="secret" type="password" placeholder="请输入管理员暗号" autofocus>
+          </div>
+          <div class="form-actions">
+            <button class="btn primary" type="submit">登录后台</button>
+          </div>
+          <div class="login-error" data-login-error></div>
+        </form>
+      </section>
+    </main>
+    <script src="static/prototype.js"></script>
+  </body>
+</html>
