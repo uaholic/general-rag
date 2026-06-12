@@ -9,7 +9,7 @@ from app.shared.runtime.logger import logger
 _milvus_client: MilvusClient | None = None
 
 
-def get_milvus_client() -> MilvusClient | None:
+def get_milvus_client() -> MilvusClient:
     """
     Milvus客户端单例获取方法
     实现客户端连接复用，避免重复创建连接消耗资源
@@ -22,15 +22,18 @@ def get_milvus_client() -> MilvusClient | None:
             milvus_uri = milvus_config.milvus_url
             # 校验Milvus连接地址配置
             if not milvus_uri:
-                logger.error("Milvus客户端连接失败：缺少MILVUS_URL环境变量配置")
-                return None
+                raise RuntimeError("缺少 MILVUS_URL 环境变量配置")
             # 初始化Milvus客户端
-            _milvus_client = MilvusClient(uri=milvus_uri,db_name=milvus_config.db_name,token=milvus_config.milvus_token)
+            _milvus_client = MilvusClient(
+                uri=milvus_uri,
+                db_name=milvus_config.db_name,
+                token=milvus_config.milvus_token or None,
+            )
             logger.info("Milvus客户端连接成功")
         return _milvus_client
     except Exception as e:
         logger.error(f"Milvus客户端连接异常：{str(e)}", exc_info=True)
-        return None
+        raise
 
 
 def create_hybrid_search_requests(dense_vector, sparse_vector, dense_params=None, sparse_params=None, expr=None,
@@ -58,7 +61,7 @@ def create_hybrid_search_requests(dense_vector, sparse_vector, dense_params=None
         data=[dense_vector], # 我们要搜索的数据   item - embedding - 稠密向量
         anns_field="dense_vector", # 搜索哪一列
         param=dense_params,  # 相识度比较 cosine
-        expr=expr, # 混合搜索的过滤条件   item_name in item_names  前置条件! 过滤出一批!  再比相识度早!
+        expr=expr, # 混合搜索的过滤条件，例如 kb_id in [...]，先按业务线绑定知识库过滤再比相似度
         # search 单列搜索 过滤条件 filter =
         limit=limit # 当前路搜索的数量   5 * 2 = 10
     )
@@ -86,7 +89,7 @@ def hybrid_search(client, collection_name, reqs, ranker_weights=(0.5, 0.5), norm
     :param ranker_weights: 加权融合权重，默认(0.5,0.5)，依次对应稠密/稀疏向量
     :param norm_score: 是否归一化评分后再融合，避免评分量级差异导致权重失效
     :param limit: 混合搜索最终返回结果数量，默认5
-    :param output_fields: 需要返回的字段列表，默认返回item_name
+    :param output_fields: 需要返回的字段列表，默认返回知识库 chunk 的核心引用字段
     :param search_params: 搜索参数，如ef/topk等，默认None
     :return: 混合搜索结果列表，搜索失败返回None
     """
@@ -107,9 +110,22 @@ def hybrid_search(client, collection_name, reqs, ranker_weights=(0.5, 0.5), norm
         rerank = WeightedRanker(ranker_weights[0], ranker_weights[1], norm_score=norm_score)
         # rrf权重器 RRFRanker(k=100)
 
-        # 默认返回字段：文档标识字段
+        if client is None:
+            raise RuntimeError("Milvus客户端未初始化")
+
+        # 默认返回字段：文档 chunk 和引用来源字段
         if output_fields is None:
-            output_fields = ["item_name"]
+            output_fields = [
+                "chunk_id",
+                "kb_id",
+                "doc_id",
+                "filename",
+                "title",
+                "title_path",
+                "content",
+                "subject_names",
+                "image_urls",
+            ]
 
         # 执行混合搜索：融合稠密+稀疏向量结果，按权重重新排序
         res = client.hybrid_search(
@@ -120,7 +136,7 @@ def hybrid_search(client, collection_name, reqs, ranker_weights=(0.5, 0.5), norm
             output_fields=output_fields,
             search_params=search_params
         )
-        # res [[{id:111,distance:0.9,entity:{item_name:烫金机}},{},{},{},{}]]  || data = [1,2,3] => [[],[],[]]
+        # res [[{id:111,distance:0.9,entity:{chunk_id, content, ...}},{},{},{},{}]]
         logger.info(f"Milvus混合搜索完成，集合[{collection_name}]共检索到{len(res[0])}条结果")
 
 
@@ -132,13 +148,13 @@ def hybrid_search(client, collection_name, reqs, ranker_weights=(0.5, 0.5), norm
                  {
                     id: 主键,
                     distance: 分,
-                    entity: {item_name: 库}
+                    entity: {chunk_id, content, kb_id, doc_id}
                  }
                    ,
                   {
                     id: 主键,
                     distance: 分,
-                    entity: {item_name: 库}
+                    entity: {chunk_id, content, kb_id, doc_id}
                  }
               
               

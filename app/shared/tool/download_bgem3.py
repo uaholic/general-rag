@@ -3,6 +3,13 @@
 """
 from modelscope.hub.snapshot_download import snapshot_download
 
-# 下载模型到当前目录下的 models/bge-m3 文件夹
-model_dir = snapshot_download('BAAI/bge-m3', cache_dir=embedding_config.bge_m3_path)
-print(f"模型已下载到: {model_dir}")
+from app.shared.config.embedding_config import embedding_config
+
+
+def main():
+    model_dir = snapshot_download("BAAI/bge-m3", cache_dir=embedding_config.bge_m3_path)
+    print(f"模型已下载到: {model_dir}")
+
+
+if __name__ == "__main__":
+    main()

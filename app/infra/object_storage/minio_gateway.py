@@ -13,14 +13,22 @@ class MinioGateway:
 
     image_dir: str = infra_config.minio.minio_img_dir
 
-    client: Minio = field(default_factory=get_minio_client)
+    _client: Minio | None = field(default=None, init=False, repr=False)
+
+    @property
+    def client(self) -> Minio:
+        if self._client is None:
+            self._client = get_minio_client()
+        return self._client
 
     def build_image_url(self, stem: str, object_name: str):
         protocol = "https" if infra_config.minio.minio_secure else "http"
+        image_dir = self.image_dir.strip("/")
+        image_prefix = f"/{image_dir}" if image_dir else ""
 
         return (
             f"{protocol}://{infra_config.minio.endpoint}/{self.bucket_name}"
-            f"/{self.image_dir}/{stem}/{object_name}"
+            f"{image_prefix}/{stem}/{object_name}"
         )
 
 minio_gateway = MinioGateway()

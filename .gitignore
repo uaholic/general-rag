@@ -165,3 +165,4 @@ logs/
 .idea
 output
 .DS_Store
+codex-worklog/

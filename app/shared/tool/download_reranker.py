@@ -3,11 +3,17 @@
 """
 from modelscope.hub.snapshot_download import snapshot_download
 
-local_dir = r"reranker_config.bge_reranker_large"
+from app.shared.config.reranker_config import reranker_config
 
-snapshot_download(
-    model_id="BAAI/bge-reranker-large",
-    cache_dir=local_dir,
-)
 
-print("下载完成，模型目录：", local_dir)
+def main():
+    local_dir = reranker_config.bge_reranker_large
+    snapshot_download(
+        model_id="BAAI/bge-reranker-large",
+        cache_dir=local_dir,
+    )
+    print("下载完成，模型目录：", local_dir)
+
+
+if __name__ == "__main__":
+    main()
