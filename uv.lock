@@ -1355,10 +1355,12 @@ dependencies = [
     { name = "pymilvus", extra = ["model"] },
     { name = "pymilvus-model" },
     { name = "pymongo" },
+    { name = "pymysql" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "regex" },
     { name = "requests" },
+    { name = "sqlalchemy" },
     { name = "torch" },
     { name = "torchaudio" },
     { name = "torchvision" },
@@ -1389,10 +1391,12 @@ requires-dist = [
     { name = "pymilvus", extras = ["model"], specifier = "==3.0.0" },
     { name = "pymilvus-model", specifier = "==0.3.2" },
     { name = "pymongo", specifier = "==4.17.0" },
+    { name = "pymysql", specifier = "==1.1.2" },
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "python-multipart", specifier = "==0.0.29" },
     { name = "regex", specifier = "==2026.5.9" },
     { name = "requests", specifier = "==2.34.2" },
+    { name = "sqlalchemy", specifier = "==2.0.50" },
     { name = "torch", specifier = "==2.2.2" },
     { name = "torchaudio", specifier = "==2.2.2" },
     { name = "torchvision", specifier = "==0.17.2" },
@@ -1947,6 +1951,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/77/ed/40eb23cf5e91de0510dfedb7d9feedeab5ce9691544ad09599e124a0a333/PyMuPDF-1.24.14-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:2d1b5c47df2f8055de5dedfbd3189c742188261a8c257f406378382adac94cff", size = 20963535, upload-time = "2024-11-19T11:18:55.527Z" },
     { url = "https://files.pythonhosted.org/packages/87/2b/46af7461bd299c3f52bc5455332cc82608cea1667cd692652505fdf9308e/PyMuPDF-1.24.14-cp39-abi3-win32.whl", hash = "sha256:60a7ee7db3e0d3a4dcbe6df2781ba4487acb7e515c64ea9c857504f44effcb25", size = 14965671, upload-time = "2024-11-19T11:19:43.549Z" },
     { url = "https://files.pythonhosted.org/packages/25/b2/82d70d9f5aea5a33e770f37e6db43ed08b5dc71b3526c5d7051689d1031e/PyMuPDF-1.24.14-cp39-abi3-win_amd64.whl", hash = "sha256:3d1f1ec2fe0249484afde7a0fc02589f19aaeb47c42939d23ae1d012aa1bc59b", size = 16257645, upload-time = "2024-11-19T11:19:23.099Z" },
+]
+
+[[package]]
+name = "pymysql"
+version = "1.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f5/ae/1fe3fcd9f959efa0ebe200b8de88b5a5ce3e767e38c7ac32fb179f16a388/pymysql-1.1.2.tar.gz", hash = "sha256:4961d3e165614ae65014e361811a724e2044ad3ea3739de9903ae7c21f539f03", size = 48258, upload-time = "2025-08-24T12:55:55.146Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/4c/ad33b92b9864cbde84f259d5df035a6447f91891f5be77788e2a3892bce3/pymysql-1.1.2-py3-none-any.whl", hash = "sha256:e6b1d89711dd51f8f74b1631fe08f039e7d76cf67a42a323d3178f0f25762ed9", size = 45300, upload-time = "2025-08-24T12:55:53.394Z" },
 ]
 
 [[package]]

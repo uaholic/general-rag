@@ -7,6 +7,7 @@ from app.shared.config.lm_config import LLMConfig, lm_config
 from app.shared.config.milvus_config import MilvusConfig, milvus_config
 from app.shared.config.mineru_config import MinerUConfig, mineru_config
 from app.shared.config.minio_config import MinIOConfig, minio_config
+from app.shared.config.mysql_config import MySQLConfig, mysql_config
 from app.shared.config.reranker_config import RerankerConfig, reranker_config
 
 __all__ = [
@@ -22,6 +23,8 @@ __all__ = [
     "mineru_config",
     "MinIOConfig",
     "minio_config",
+    "MySQLConfig",
+    "mysql_config",
     "RerankerConfig",
     "reranker_config",
 ]

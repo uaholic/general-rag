@@ -25,7 +25,7 @@ class HistoryMongoTool:
         if not self.db_name:
             raise RuntimeError("缺少 MONGO_DB_NAME 环境变量配置")
 
-        self.client = MongoClient(self.mongo_url)
+        self.client = MongoClient(self.mongo_url, serverSelectionTimeoutMS=1000)
         self.db = self.client[self.db_name]
         self.chat_sessions = self.db["chat_sessions"]
         self.chat_messages = self.db["chat_messages"]
@@ -65,6 +65,19 @@ def clear_history(session_id: str) -> int:
         return result.deleted_count
     except Exception as e:
         logger.error(f"Error clearing history for session {session_id}: {e}")
+        return 0
+
+
+def clear_all_history() -> int:
+    """Clear all chat sessions and messages."""
+    mongo_tool = get_history_mongo_tool()
+    try:
+        messages = mongo_tool.chat_messages.delete_many({})
+        mongo_tool.chat_sessions.delete_many({})
+        logger.info(f"Deleted {messages.deleted_count} chat messages and all sessions")
+        return messages.deleted_count
+    except Exception as e:
+        logger.error(f"Error clearing all history: {e}")
         return 0
 
 
@@ -163,4 +176,15 @@ def get_recent_messages(session_id: str, limit: int = 10) -> list[dict[str, Any]
         return messages
     except Exception as e:
         logger.error(f"Error getting recent messages: {e}")
+        return []
+
+
+def list_chat_sessions(limit: int = 100) -> list[dict[str, Any]]:
+    """List recent chat sessions for admin table."""
+    mongo_tool = get_history_mongo_tool()
+    try:
+        cursor = mongo_tool.chat_sessions.find({}).sort("updated_at", -1).limit(limit)
+        return list(cursor)
+    except Exception as e:
+        logger.error(f"Error listing chat sessions: {e}")
         return []

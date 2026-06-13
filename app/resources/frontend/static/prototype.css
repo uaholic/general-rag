@@ -521,6 +521,16 @@ label.kb-picker-row:hover {
   background: #f9fbfe;
 }
 
+label.kb-picker-row.disabled {
+  cursor: not-allowed;
+  color: #98a2b3;
+  background: #fbfcfe;
+}
+
+label.kb-picker-row.disabled:hover {
+  background: #fbfcfe;
+}
+
 .kb-picker-row input {
   appearance: none;
   -webkit-appearance: none;
@@ -534,6 +544,11 @@ label.kb-picker-row:hover {
   background: #fff;
   position: relative;
   flex: 0 0 auto;
+}
+
+.kb-picker-row input:disabled {
+  border-color: #d5dbe5;
+  background: #eef2f7;
 }
 
 .kb-status {
@@ -591,6 +606,10 @@ label.kb-picker-row:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.kb-picker-row.disabled .kb-picker-desc {
+  color: #a8b1c0;
 }
 
 .embed-options {

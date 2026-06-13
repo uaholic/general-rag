@@ -1,5 +1,6 @@
 (function () {
   const script = document.currentScript;
+  const apiBase = script?.dataset.apiBase || window.location.origin;
   const themeColor = script?.dataset.themeColor || "#2563eb";
   const businessLineId = script?.dataset.businessLineId || "business_line_course";
   const presets = {
@@ -129,6 +130,48 @@
       border: 1px solid #e8edf4;
       margin: 8px 0;
     }
+    .rag-widget-progress {
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid #dbe6f5;
+      border-radius: 7px;
+      background: #f8fbff;
+      color: #475467;
+      font-size: 12px;
+    }
+    .rag-widget-progress-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .rag-widget-progress-track {
+      height: 5px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e8edf4;
+    }
+    .rag-widget-progress-fill {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: ${themeColor};
+      transition: width .2s ease;
+    }
+    .rag-widget-images {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .rag-widget-image-caption {
+      color: #667085;
+      font-size: 12px;
+    }
+    .rag-widget-error {
+      margin-top: 8px;
+      color: #b42318;
+      font-size: 12px;
+    }
     .rag-widget-welcome {
       color: #667085;
       font-size: 13px;
@@ -180,8 +223,9 @@
 
   const root = document.createElement("div");
   root.className = "rag-widget-root";
+  root.dataset.apiBase = apiBase;
   root.innerHTML = `
-    <button class="rag-widget-button" type="button" aria-label="打开聊天框">?</button>
+    <button class="rag-widget-button" type="button" aria-label="打开聊天框">问</button>
     <section class="rag-widget-panel" aria-label="知识库聊天框">
       <header class="rag-widget-header">
         <div>
@@ -217,7 +261,7 @@
   }
 
   function escapeHtml(text) {
-    return text.replace(/[&<>"']/g, (char) => ({
+    return String(text || "").replace(/[&<>"']/g, (char) => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
@@ -226,12 +270,97 @@
     })[char]);
   }
 
+  function apiUrl(path) {
+    return `${(apiBase || window.location.origin).replace(/\/$/, "")}${path}`;
+  }
+
+  function updateProgress(target, data) {
+    target.style.display = "block";
+    const percent = Number(data.percent || 0);
+    target.innerHTML = `
+      <div class="rag-widget-progress-line">
+        <span>${escapeHtml(data.label || data.step || "处理中")}</span>
+        <span>${Math.max(0, Math.min(100, percent))}%</span>
+      </div>
+      <div class="rag-widget-progress-track"><span class="rag-widget-progress-fill" style="width:${Math.max(0, Math.min(100, percent))}%"></span></div>
+      ${data.message ? `<div style="margin-top:6px">${escapeHtml(data.message)}</div>` : ""}
+    `;
+  }
+
+  function renderImages(target, data) {
+    const images = Array.isArray(data.images) ? data.images : [];
+    if (!images.length && !data.message) return;
+    const box = document.createElement("div");
+    box.className = "rag-widget-images";
+    if (data.message) {
+      const caption = document.createElement("div");
+      caption.className = "rag-widget-image-caption";
+      caption.textContent = data.message;
+      box.appendChild(caption);
+    }
+    images.forEach((image) => {
+      if (!image.url) return;
+      const img = document.createElement("img");
+      img.src = image.url;
+      img.alt = image.caption || "知识库图片";
+      box.appendChild(img);
+      if (image.caption) {
+        const caption = document.createElement("div");
+        caption.className = "rag-widget-image-caption";
+        caption.textContent = image.caption;
+        box.appendChild(caption);
+      }
+    });
+    target.appendChild(box);
+  }
+
+  function renderReferences(target, references) {
+    const refs = Array.isArray(references) ? references : [];
+    if (!refs.length) return;
+    target.innerHTML = refs.map((ref, index) => {
+      if (typeof ref === "string") return `<div class="rag-widget-ref">${escapeHtml(ref)}</div>`;
+      const title = ref.title || ref.file_name || ref.doc_name || `引用 ${index + 1}`;
+      const score = ref.score == null ? "" : ` / score: ${ref.score}`;
+      const text = ref.text || ref.content || ref.chunk || "";
+      return `<div class="rag-widget-ref"><strong>${escapeHtml(title)}${escapeHtml(score)}</strong>${text ? `<div>${escapeHtml(text)}</div>` : ""}</div>`;
+    }).join("");
+  }
+
+  async function readSse(response, onEvent) {
+    if (!response.body) throw new Error("浏览器不支持流式响应");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop() || "";
+      chunks.forEach((chunk) => {
+        const lines = chunk.split("\n");
+        let event = "message";
+        let data = "";
+        lines.forEach((line) => {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          if (line.startsWith("data:")) data += line.slice(5).trim();
+        });
+        if (!data) return;
+        try {
+          onEvent(event, JSON.parse(data));
+        } catch {
+          onEvent(event, { text: data });
+        }
+      });
+    }
+  }
+
   loadHistory().forEach(renderMessage);
 
   button.addEventListener("click", () => root.classList.add("open"));
   close.addEventListener("click", () => root.classList.remove("open"));
 
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const question = input.value.trim();
     if (!question) return;
@@ -242,23 +371,67 @@
     input.value = "";
 
     const assistant = renderMessage({ role: "assistant", content: "" });
-    const answer = preset.answer;
-    let index = 0;
-    const timer = window.setInterval(() => {
-      assistant.textContent += answer[index] || "";
-      messages.scrollTop = messages.scrollHeight;
-      index += 1;
-      if (index >= answer.length) {
-        window.clearInterval(timer);
-        assistant.innerHTML = `${escapeHtml(answer)}
-          <div style="height:72px;margin-top:8px;border:1px solid #e8edf4;border-radius:8px;background:linear-gradient(135deg,rgba(37,99,235,.14),rgba(22,163,74,.18)),repeating-linear-gradient(45deg,#fff,#fff 8px,#edf2f7 8px,#edf2f7 16px);"></div>
-          <div class="rag-widget-refs">
-            ${preset.refs.map((ref) => `<div class="rag-widget-ref">${escapeHtml(ref)}</div>`).join("")}
-          </div>`;
-        const assistantMessage = { role: "assistant", html: assistant.innerHTML };
-        history.push(assistantMessage);
-        saveHistory(history);
-      }
-    }, 18);
+    assistant.innerHTML = `
+      <div data-answer-text></div>
+      <div class="rag-widget-progress" data-progress></div>
+      <div class="rag-widget-refs" data-references></div>
+    `;
+    const answerText = assistant.querySelector("[data-answer-text]");
+    const progress = assistant.querySelector("[data-progress]");
+    const refs = assistant.querySelector("[data-references]");
+    let answer = "";
+
+    try {
+      const response = await fetch(apiUrl("/api/chat/stream"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: ensureSession(),
+          message: question,
+          company_id: script?.dataset.companyId || "default_company",
+          business_line_id: businessLineId
+        })
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      await readSse(response, (eventName, data) => {
+        if (eventName === "progress") {
+          updateProgress(progress, data);
+        } else if (eventName === "delta") {
+          answer += data.text || data.content || "";
+          answerText.textContent = answer;
+        } else if (eventName === "image") {
+          renderImages(assistant, data);
+        } else if (eventName === "references") {
+          renderReferences(refs, data.references);
+        } else if (eventName === "final") {
+          if (!answer && data.answer) {
+            answer = data.answer;
+            answerText.textContent = answer;
+          }
+          progress.style.display = "none";
+        } else if (eventName === "error") {
+          throw new Error(data.message || "回答生成失败");
+        }
+        messages.scrollTop = messages.scrollHeight;
+      });
+    } catch (error) {
+      progress.style.display = "none";
+      answer = preset.answer;
+      answerText.textContent = answer;
+      const fallback = document.createElement("div");
+      fallback.className = "rag-widget-error";
+      fallback.textContent = "当前后端接口未连接，已展示本地演示回答。";
+      assistant.appendChild(fallback);
+      renderImages(assistant, {
+        message: "图片事件会在后端返回 image SSE 时展示在这里。",
+        images: []
+      });
+      renderReferences(refs, preset.refs);
+    }
+
+    const assistantMessage = { role: "assistant", html: assistant.innerHTML };
+    history.push(assistantMessage);
+    saveHistory(history);
   });
 })();
