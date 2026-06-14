@@ -13,10 +13,13 @@ from app.api.frontend import admin_page_response
 from app.api.schemas.common import ApiResponse
 from app.api.schemas.document import DocumentUploadResponse
 from app.infra.persistence.admin_repositories import DocumentRepository, KnowledgeBaseRepository
+from app.process.import_.agent.main_graph import run_import_graph
+from app.rag.import_.pdf_parser_service import pdf_parser_service
 from app.shared.utils.path_util import PROJECT_ROOT
 
 router = APIRouter(prefix="/admin/documents", tags=["document"])
 UPLOAD_ROOT = PROJECT_ROOT / "app" / "resources" / "uploads"
+PARSABLE_FILE_TYPES = {"txt", "md", "markdown", "pdf"}
 
 
 @router.get("", include_in_schema=False)
@@ -75,7 +78,20 @@ async def upload_document(
         parse_status="pending",
     )
     session.commit()
-    return DocumentUploadResponse(doc_id=doc_id, task_id=task_id, message="已保存文档，等待解析实现")
+
+    message = "已保存文档，当前文件类型的解析流程待实现"
+    if file_type in PARSABLE_FILE_TYPES:
+        try:
+            state = run_import_graph(doc_id=doc_id, task_id=task_id)
+            warning_count = len(state.get("asset_warnings", []))
+            message = (
+                f"已保存文档，并完成基础解析；发现 {warning_count} 个本地图片引用未处理"
+                if warning_count
+                else "已保存文档，并完成基础解析"
+            )
+        except Exception as exc:
+            message = f"已保存文档，但基础解析失败：{exc}"
+    return DocumentUploadResponse(doc_id=doc_id, task_id=task_id, message=message)
 
 
 @router.post("/{doc_id}/reparse", response_model=ApiResponse)
@@ -84,8 +100,18 @@ async def reparse_document(doc_id: str, session: Session = Depends(get_db_sessio
     document = repo.reset_parse_status(doc_id)
     if document is None:
         raise HTTPException(status_code=404, detail="文档不存在")
+    file_type = (document.file_type or "").lower()
     session.commit()
-    return ApiResponse(message="已提交重解析占位任务", data=repo.to_dict(document))
+    if file_type in PARSABLE_FILE_TYPES:
+        try:
+            state = run_import_graph(doc_id=doc_id, task_id=f"reparse_{doc_id}")
+            warning_count = len(state.get("asset_warnings", []))
+            if warning_count:
+                return ApiResponse(message=f"基础重解析完成；发现 {warning_count} 个本地图片引用未处理", data=state)
+            return ApiResponse(message="基础重解析完成", data=state)
+        except Exception as exc:
+            return ApiResponse(success=False, message=f"基础重解析失败：{exc}", data={"doc_id": doc_id})
+    return ApiResponse(message="已重置为待解析，当前文件类型的解析流程待实现", data={"doc_id": doc_id})
 
 
 @router.post("/{doc_id}/delete", response_model=ApiResponse)
@@ -107,4 +133,5 @@ async def delete_document(doc_id: str, session: Session = Depends(get_db_session
             file_path.parent.rmdir()
         except OSError:
             pass
+    pdf_parser_service.delete_parsed(doc_id)
     return ApiResponse(message="文档已删除", data={"doc_id": doc_id})

@@ -307,7 +307,7 @@
           <div class="modal-body form-grid single">
             <div class="field"><label>所属知识库</label><select name="kb_id" data-upload-kb-select></select></div>
             <div class="field"><label>选择文档</label><input name="file" type="file" required></div>
-            <div class="drop-zone"><div><strong>Markdown / TXT / PDF 文档</strong><span class="page-desc">当前版本先保存文件和元数据，解析流程后续接入。</span></div></div>
+            <div class="drop-zone"><div><strong>Markdown / TXT / PDF 文档</strong><span class="page-desc">PDF 会解析为 Markdown 和图片目录，Markdown 本地图片需后续打包处理。</span></div></div>
             <ul class="hint-list">
               <li>文档会保存到 MinIO 或本地对象存储。</li>
               <li>解析后提取图片、生成说明并写入 Milvus chunk。</li>

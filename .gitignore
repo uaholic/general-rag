@@ -167,3 +167,4 @@ output
 .DS_Store
 codex-worklog/
 app/resources/uploads/
+app/resources/parsed/
