@@ -1,11 +1,14 @@
 """后台问答测试接口。"""
 from __future__ import annotations
 
+from uuid import uuid4
+
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
 
 from app.api.frontend import admin_page_response
 from app.api.schemas.playground import PlaygroundChatRequest
+from app.process.query.agent.main_graph import run_query_graph
 
 router = APIRouter(prefix="/admin/playground", tags=["playground"])
 
@@ -17,9 +20,21 @@ async def playground_page() -> FileResponse:
 
 @router.post("/chat")
 async def playground_chat(payload: PlaygroundChatRequest):
-    # TODO: 调用 QueryGraph，source=playground，可先非流式返回。
+    session_id = f"playground_{uuid4().hex[:12]}"
+    state = run_query_graph(
+        session_id=session_id,
+        message=payload.message,
+        business_line_id=payload.business_line_id,
+        use_llm=True,
+    )
     return {
-        "answer": "后台测试回答接口待实现。",
-        "references": [],
-        "debug": payload.model_dump(),
+        "answer": state.get("answer", ""),
+        "references": state.get("references", []),
+        "images": state.get("images", []),
+        "progress": state.get("progress", []),
+        "debug": {
+            "session_id": session_id,
+            "rewritten_query": state.get("rewritten_query", ""),
+            "retrieved_count": len(state.get("retrieved_chunks", [])),
+        },
     }

@@ -1,13 +1,16 @@
 """查询检索服务。"""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.infra.llm.providers import llm_provider
+from app.infra.persistence.admin_repositories import DocumentRepository
 from app.infra.persistence.models import Document
 from app.infra.persistence.mysql import session_scope
 from app.infra.vectorstore.milvus_gateway import milvus_gateway
@@ -17,15 +20,10 @@ from app.shared.utils.escape_milvus_string_utils import escape_milvus_string
 
 
 class QueryRetrievalService:
-    """负责把用户问题转换为检索结果。
-
-    当前默认走本地文档轻量检索，保证没有 Milvus 时也能练习完整链路。
-    打开 use_milvus 后，会走 BGE-M3 + Milvus 混合检索骨架。
-    """
+    """负责把用户问题转换为检索结果。"""
 
     def rewrite_query(self, question: str) -> str:
-        # TODO: 练习点：接 LLM 做问题改写，例如补全上下文、统一主体名称。
-        return question.strip()
+        return " ".join(question.strip().split())
 
     def search(
         self,
@@ -38,17 +36,23 @@ class QueryRetrievalService:
         if not kb_ids:
             return []
         if use_milvus:
-            return self.search_milvus(query=query, kb_ids=kb_ids, top_k=top_k)
+            try:
+                chunks = self.search_milvus(query=query, kb_ids=kb_ids, top_k=top_k)
+                if chunks:
+                    return chunks
+            except Exception:
+                pass
         return self.search_local_documents(query=query, kb_ids=kb_ids, top_k=top_k)
 
     def search_local_documents(self, *, query: str, kb_ids: list[str], top_k: int = 5) -> list[dict[str, Any]]:
-        """没有向量库时的练习版检索：读取 success 文档，按关键词做粗略打分。"""
+        """没有向量库时的本地检索：读取 success 文档，按关键词做粗略打分。"""
         keywords = self._keywords(query)
         if not keywords:
             return []
 
         candidates: list[dict[str, Any]] = []
         with session_scope() as session:
+            repo = DocumentRepository(session)
             statement = (
                 select(Document)
                 .where(Document.kb_id.in_(kb_ids))
@@ -60,6 +64,7 @@ class QueryRetrievalService:
                     continue
                 if not path.exists():
                     continue
+                image_lookup = self._document_image_lookup(repo, document.doc_id)
                 text = path.read_text(encoding="utf-8", errors="ignore")
                 chunks = TextChunker(chunk_size=800, chunk_overlap=120).split(text)
                 for chunk in chunks:
@@ -75,7 +80,7 @@ class QueryRetrievalService:
                             "title": document.filename,
                             "content": chunk.content,
                             "score": score,
-                            "image_urls": [],
+                            "image_urls": self._image_urls_for_chunk(chunk.content, image_lookup),
                             "subject_names": [],
                         }
                     )
@@ -85,6 +90,9 @@ class QueryRetrievalService:
 
     def search_milvus(self, *, query: str, kb_ids: list[str], top_k: int = 5) -> list[dict[str, Any]]:
         """Milvus 混合检索骨架。"""
+        collection_name = milvus_gateway.chunk_collection_name
+        if not milvus_gateway.client.has_collection(collection_name):
+            return []
         embeddings = llm_provider.embed_documents([query])
         dense_vector = embeddings["dense"][0]
         sparse_vector = embeddings["sparse"][0]
@@ -96,7 +104,7 @@ class QueryRetrievalService:
             limit=top_k,
         )
         result = milvus_gateway.hybrid_search(
-            collection_name=milvus_gateway.chunk_collection_name,
+            collection_name=collection_name,
             reqs=requests,
             limit=top_k,
         )
@@ -108,10 +116,23 @@ class QueryRetrievalService:
         if not use_rerank or not chunks:
             return chunks[:top_k]
 
-        # TODO: 练习点：调用 llm_provider.reranker_model().compute_score，
-        # 按 [query, chunk["content"]] 对打分后重排。
-        _ = query
-        return chunks[:top_k]
+        try:
+            reranker = llm_provider.reranker_model()
+            pairs = [[query, chunk.get("content", "")] for chunk in chunks]
+            scores = reranker.compute_score(pairs)
+            if not isinstance(scores, list):
+                scores = [float(scores)]
+            scored_chunks = []
+            for index, chunk in enumerate(chunks):
+                item = dict(chunk)
+                if index < len(scores):
+                    item["rerank_score"] = float(scores[index])
+                    item["score"] = float(scores[index])
+                scored_chunks.append(item)
+            scored_chunks.sort(key=lambda item: item.get("rerank_score", item.get("score", 0)), reverse=True)
+            return scored_chunks[:top_k]
+        except Exception:
+            return chunks[:top_k]
 
     def build_references(self, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         references: list[dict[str, Any]] = []
@@ -124,14 +145,19 @@ class QueryRetrievalService:
                     "title": chunk.get("title") or chunk.get("filename") or "引用文档",
                     "text": (chunk.get("content") or "")[:300],
                     "score": chunk.get("score"),
+                    "image_urls": chunk.get("image_urls") or [],
                 }
             )
         return references
 
     def collect_images(self, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         images: list[dict[str, Any]] = []
+        seen: set[str] = set()
         for chunk in chunks:
             for url in chunk.get("image_urls") or []:
+                if not url or url in seen:
+                    continue
+                seen.add(url)
                 images.append({"url": url, "caption": chunk.get("title") or chunk.get("filename") or ""})
         return images
 
@@ -151,6 +177,8 @@ class QueryRetrievalService:
         return {
             **dict(entity),
             "score": distance,
+            "subject_names": QueryRetrievalService._parse_json_list(entity.get("subject_names")),
+            "image_urls": QueryRetrievalService._parse_json_list(entity.get("image_urls")),
         }
 
     @staticmethod
@@ -165,6 +193,41 @@ class QueryRetrievalService:
         if file_type == "pdf":
             return pdf_parser_service.find_latest_markdown(document.doc_id)
         return None
+
+    @staticmethod
+    def _document_image_lookup(repo: DocumentRepository, doc_id: str) -> dict[str, str]:
+        lookup: dict[str, str] = {}
+        for image in repo.list_images(doc_id):
+            url = image.get("url") or image.get("minio_url") or ""
+            filename = image.get("filename") or ""
+            if not url:
+                continue
+            lookup[url] = url
+            if filename:
+                lookup[filename] = url
+        return lookup
+
+    @staticmethod
+    def _image_urls_for_chunk(text: str, lookup: dict[str, str]) -> list[str]:
+        urls: list[str] = []
+        for marker, url in lookup.items():
+            if marker and marker in text and url not in urls:
+                urls.append(url)
+        return urls
+
+    @staticmethod
+    def _parse_json_list(value: Any) -> list:
+        if isinstance(value, list):
+            return value
+        if not value:
+            return []
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                return parsed if isinstance(parsed, list) else []
+            except json.JSONDecodeError:
+                return [item.strip() for item in value.split(",") if item.strip()]
+        return []
 
     @staticmethod
     def _score(text: str, keywords: list[str]) -> float:

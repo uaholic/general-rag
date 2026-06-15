@@ -16,6 +16,7 @@ from app.infra.persistence.models import (
     ModelConfig,
     SystemConfig,
 )
+from app.shared.config.lm_config import lm_config
 
 
 DEFAULT_CONFIG_ID = "default"
@@ -292,10 +293,11 @@ class ModelConfigRepository:
 
     def get_default(self) -> ModelConfig:
         config = self.session.get(ModelConfig, DEFAULT_CONFIG_ID)
+        default_llm_model = lm_config.llm_model or "qwen-flash"
         if config is None:
             config = ModelConfig(
                 id=DEFAULT_CONFIG_ID,
-                llm_model_name="gpt-4o-mini",
+                llm_model_name=default_llm_model,
                 embedding_model_name="BGE-M3",
                 rerank_model_name="BGE Reranker",
                 image_model_name="Qwen-Flash",
@@ -303,6 +305,9 @@ class ModelConfigRepository:
                 use_rerank=False,
             )
             self.session.add(config)
+            self.session.flush()
+        elif config.llm_model_name in {"", "gpt-4o-mini"} and lm_config.llm_model:
+            config.llm_model_name = default_llm_model
             self.session.flush()
         return config
 
@@ -413,6 +418,8 @@ class DocumentRepository:
         document.error_msg = ""
         document.chunk_count = 0
         document.image_count = 0
+        document.minio_url = ""
+        self.clear_images(doc_id)
         self.session.flush()
         self._refresh_kb_counts(document.kb_id)
         self.session.flush()
@@ -423,12 +430,43 @@ class DocumentRepository:
         if document is None:
             return False
         kb_id = document.kb_id
-        self.session.execute(delete(DocumentImage).where(DocumentImage.doc_id == doc_id))
+        self.clear_images(doc_id)
         self.session.delete(document)
         self.session.flush()
         self._refresh_kb_counts(kb_id)
         self.session.flush()
         return True
+
+    def clear_images(self, doc_id: str) -> int:
+        result = self.session.execute(delete(DocumentImage).where(DocumentImage.doc_id == doc_id))
+        return int(result.rowcount or 0)
+
+    def replace_images(self, document: Document, image_records: list[dict]) -> int:
+        self.clear_images(document.doc_id)
+        unique_records: list[dict] = []
+        seen_urls: set[str] = set()
+        for record in image_records:
+            url = record.get("url") or record.get("minio_url") or ""
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            unique_records.append(record)
+
+        for index, record in enumerate(unique_records, start=1):
+            self.session.add(
+                DocumentImage(
+                    image_id=record.get("image_id") or f"img_{uuid4().hex[:12]}",
+                    doc_id=document.doc_id,
+                    kb_id=document.kb_id,
+                    filename=record.get("filename") or f"image_{index}",
+                    minio_url=record.get("url") or record.get("minio_url"),
+                    caption=record.get("caption") or "",
+                    alt_text=record.get("alt_text") or "",
+                )
+            )
+        document.image_count = len(unique_records)
+        self.session.flush()
+        return len(unique_records)
 
     def list_images(self, doc_id: str) -> list[dict]:
         statement = select(DocumentImage).where(DocumentImage.doc_id == doc_id).order_by(DocumentImage.created_at.asc())
@@ -436,6 +474,7 @@ class DocumentRepository:
             {
                 "image_id": image.image_id,
                 "filename": image.filename or "",
+                "url": image.minio_url,
                 "minio_url": image.minio_url,
                 "caption": image.caption or "",
                 "alt_text": image.alt_text or "",

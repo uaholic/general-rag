@@ -9,6 +9,8 @@ const state = {
   knowledgeBases: [],
   documents: [],
   chatSessions: [],
+  documentTasks: {},
+  documentTaskTimers: {},
   activeDocId: "",
   activeSessionId: ""
 };
@@ -180,6 +182,11 @@ async function loadBusinessLines() {
 async function loadDocuments() {
   const result = await apiJson("/admin/documents/list");
   state.documents = result.items || [];
+  state.documents.forEach((item) => {
+    if (item.task) cacheDocumentTask(item.task);
+    const task = documentTaskFor(item);
+    if (task?.task_id && isActiveDocumentTask(task.status)) watchDocumentTask(item.doc_id);
+  });
   renderDocuments();
   renderDashboardDocuments();
 }
@@ -265,6 +272,63 @@ function parseStatusMarkup(status) {
   return `<span class="status ${style}">${escapeHtml(label)}</span>`;
 }
 
+function isActiveDocumentTask(status) {
+  return status === "pending" || status === "parsing";
+}
+
+function cacheDocumentTask(task) {
+  if (!task?.doc_id) return;
+  state.documentTasks[task.doc_id] = task;
+}
+
+function documentTaskFor(item) {
+  if (!item?.doc_id) return null;
+  return state.documentTasks[item.doc_id] || item.task || null;
+}
+
+function documentTaskProgressMarkup(item) {
+  const task = documentTaskFor(item);
+  if (!task) return "";
+  const status = task.status || item.parse_status;
+  const progress = task.progress || [];
+  const latest = progress[progress.length - 1] || {};
+  if (!isActiveDocumentTask(status) && status !== "failed") return "";
+  const percent = Math.max(0, Math.min(100, Number(latest.percent || (status === "failed" ? 100 : 0))));
+  const message = status === "failed" ? (task.error_msg || "处理失败") : (latest.message || task.message || "等待处理");
+  return `
+    <div class="document-progress ${status === "failed" ? "failed" : ""}">
+      <div class="document-progress-meta"><span>${escapeHtml(message)}</span><span>${percent}%</span></div>
+      <div class="document-progress-bar"><span style="width: ${percent}%"></span></div>
+    </div>
+  `;
+}
+
+async function pollDocumentTask(docId) {
+  state.documentTaskTimers[docId] = "polling";
+  try {
+    const task = await apiJson(`/admin/documents/${encodeURIComponent(docId)}/task`);
+    cacheDocumentTask(task);
+    await Promise.all([loadDocuments(), loadKnowledgeBases(), loadDashboard()]);
+    if (state.activeDocId === docId) {
+      const document = await apiJson(`/admin/documents/${encodeURIComponent(docId)}`);
+      renderDocumentDetail(document);
+    }
+    if (task.task_id && isActiveDocumentTask(task.status)) {
+      state.documentTaskTimers[docId] = window.setTimeout(() => pollDocumentTask(docId), 1500);
+    } else {
+      delete state.documentTaskTimers[docId];
+    }
+  } catch (error) {
+    delete state.documentTaskTimers[docId];
+    showToast(error.message);
+  }
+}
+
+function watchDocumentTask(docId) {
+  if (!docId || state.documentTaskTimers[docId]) return;
+  state.documentTaskTimers[docId] = window.setTimeout(() => pollDocumentTask(docId), 1200);
+}
+
 function renderDocuments() {
   const tbody = $("[data-documents-tbody]");
   if (!tbody) return;
@@ -277,7 +341,7 @@ function renderDocuments() {
       <td><strong>${escapeHtml(item.filename)}</strong><br><span class="page-desc">${escapeHtml(item.doc_id)}</span></td>
       <td>${escapeHtml(item.kb_name || item.kb_id)}</td>
       <td>${escapeHtml(item.file_type || "-")}</td>
-      <td>${parseStatusMarkup(item.parse_status)}</td>
+      <td>${parseStatusMarkup(item.parse_status)}${documentTaskProgressMarkup(item)}</td>
       <td>${item.chunk_count || 0}</td>
       <td>${item.image_count || 0}</td>
       <td>
@@ -303,7 +367,7 @@ function renderDashboardDocuments() {
     <tr>
       <td>${escapeHtml(item.filename)}</td>
       <td>${escapeHtml(item.kb_name || item.kb_id)}</td>
-      <td>${parseStatusMarkup(item.parse_status)}</td>
+      <td>${parseStatusMarkup(item.parse_status)}${documentTaskProgressMarkup(item)}</td>
       <td>${escapeHtml(item.updated_at || "-")}</td>
     </tr>
   `).join("");
@@ -402,6 +466,24 @@ function renderPlaygroundReferences(references) {
   }).join("");
 }
 
+function renderPlaygroundImages(images) {
+  const answer = $("[data-playground-answer]");
+  if (!answer) return;
+  const items = Array.isArray(images) ? images.filter((image) => image.url) : [];
+  if (!items.length) return;
+  const html = `
+    <div class="references">
+      ${items.map((image) => `
+        <div class="image-row">
+          <img class="thumb" src="${escapeHtml(image.url)}" alt="${escapeHtml(image.caption || "知识库图片")}">
+          <p>${escapeHtml(image.caption || image.filename || "知识库图片")}</p>
+        </div>
+      `).join("")}
+    </div>
+  `;
+  answer.insertAdjacentHTML("beforeend", html);
+}
+
 function kbBoundLineNames(kb) {
   return (kb?.business_lines || []).map((line) => line.business_line_name).filter(Boolean);
 }
@@ -493,7 +575,9 @@ function renderDocumentDetail(document) {
     <div class="env-list">
       <div class="env-row"><span>所属知识库</span><strong>${escapeHtml(document.kb_name || document.kb_id)}</strong></div>
       <div class="env-row"><span>解析状态</span>${parseStatusMarkup(document.parse_status)}</div>
+      <div class="env-row"><span>导入进度</span><span>${documentTaskProgressMarkup(document) || escapeHtml(document.parse_status || "-")}</span></div>
       <div class="env-row"><span>文件路径</span><span>${escapeHtml(document.file_path || "-")}</span></div>
+      <div class="env-row"><span>MinIO 地址</span><span>${document.minio_url ? `<a class="link-btn" href="${escapeHtml(document.minio_url)}" target="_blank" rel="noreferrer">打开源文件</a>` : "-"}</span></div>
       <div class="env-row"><span>Chunk / 图片</span><strong>${document.chunk_count || 0} / ${document.image_count || 0}</strong></div>
       <div class="env-row"><span>错误信息</span><span>${escapeHtml(document.error_msg || "-")}</span></div>
     </div>
@@ -502,11 +586,11 @@ function renderDocumentDetail(document) {
       images.length
         ? images.map((image) => `
           <div class="image-row">
-            <div class="thumb"></div>
+            <img class="thumb" src="${escapeHtml(image.url || image.minio_url)}" alt="${escapeHtml(image.caption || image.alt_text || image.filename || "知识库图片")}">
             <p>${escapeHtml(image.caption || image.alt_text || image.filename || "暂无图片说明")}</p>
           </div>
         `).join("")
-        : `<p class="page-desc">暂无图片。后续解析流程写入 document_image 后会展示在这里。</p>`
+        : `<p class="page-desc">暂无图片。</p>`
     }
   `;
 }
@@ -565,6 +649,67 @@ async function deleteDocument(docId) {
 async function refreshConfigViews() {
   await Promise.all([loadKnowledgeBases(), loadBusinessLines(), loadDocuments(), loadDashboard()]);
   renderUploadKbOptions();
+}
+
+function updateUploadFileName() {
+  const input = $("[data-upload-file-input]");
+  const label = $("[data-upload-file-name]");
+  if (!label) return;
+  const file = input?.files?.[0];
+  label.textContent = file ? file.name : "拖拽 PDF / Markdown / TXT 到这里";
+}
+
+function setUploadFile(file) {
+  const input = $("[data-upload-file-input]");
+  if (!input || !file) return;
+  const transfer = new DataTransfer();
+  transfer.items.add(file);
+  input.files = transfer.files;
+  updateUploadFileName();
+}
+
+function isFileDrag(event) {
+  return Array.from(event.dataTransfer?.types || []).includes("Files");
+}
+
+function bindUploadDropZone() {
+  const dropZone = $("[data-upload-drop-zone]");
+  const input = $("[data-upload-file-input]");
+  if (!dropZone || !input) return;
+
+  input.addEventListener("change", updateUploadFileName);
+  dropZone.addEventListener("click", () => input.click());
+
+  ["dragenter", "dragover"].forEach((name) => {
+    dropZone.addEventListener(name, (event) => {
+      if (!isFileDrag(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dropZone.classList.add("is-dragging");
+    });
+  });
+
+  ["dragleave", "drop"].forEach((name) => {
+    dropZone.addEventListener(name, () => dropZone.classList.remove("is-dragging"));
+  });
+
+  dropZone.addEventListener("drop", (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const file = event.dataTransfer?.files?.[0];
+    if (file) setUploadFile(file);
+  });
+
+  document.addEventListener("dragover", (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+  });
+  document.addEventListener("drop", (event) => {
+    if (!isFileDrag(event)) return;
+    if (event.target.closest("[data-upload-drop-zone]")) return;
+    event.preventDefault();
+  });
 }
 
 function bindForms() {
@@ -653,7 +798,18 @@ function bindForms() {
         body: payload
       });
       showToast(result.message || "文档已上传");
+      if (result.task_id) {
+        cacheDocumentTask({
+          task_id: result.task_id,
+          doc_id: result.doc_id,
+          status: "pending",
+          progress: [],
+          message: "等待开始解析"
+        });
+        watchDocumentTask(result.doc_id);
+      }
       uploadForm.reset();
+      updateUploadFileName();
       closeModal(uploadForm);
       await reloadDocumentViews();
     } catch (error) {
@@ -775,6 +931,16 @@ function bindDelegatedEvents() {
         const docId = reparseDocButton.dataset.reparseDoc;
         const result = await apiJson(`/admin/documents/${encodeURIComponent(docId)}/reparse`, { method: "POST" });
         showToast(result.message || "已提交重解析");
+        if (result.data?.task_id) {
+          cacheDocumentTask({
+            task_id: result.data.task_id,
+            doc_id,
+            status: "pending",
+            progress: [],
+            message: "等待开始解析"
+          });
+          watchDocumentTask(docId);
+        }
         await reloadDocumentViews();
       } catch (error) {
         showToast(error.message);
@@ -799,6 +965,16 @@ function bindDelegatedEvents() {
         if (!docId) return;
         const result = await apiJson(`/admin/documents/${encodeURIComponent(docId)}/reparse`, { method: "POST" });
         showToast(result.message || "已提交重解析");
+        if (result.data?.task_id) {
+          cacheDocumentTask({
+            task_id: result.data.task_id,
+            doc_id,
+            status: "pending",
+            progress: [],
+            message: "等待开始解析"
+          });
+          watchDocumentTask(docId);
+        }
         const document = await apiJson(`/admin/documents/${encodeURIComponent(docId)}`);
         renderDocumentDetail(document);
         await reloadDocumentViews();
@@ -984,8 +1160,11 @@ function bindPlayground() {
         } else if (eventName === "delta") {
           finalAnswer += data.text || data.content || "";
           if (answerText) answerText.textContent = finalAnswer;
-        } else if (eventName === "image" && data.message && answer) {
-          answer.insertAdjacentHTML("beforeend", `<p class="page-desc">${escapeHtml(data.message)}</p>`);
+        } else if (eventName === "image") {
+          if (data.message && answer) {
+            answer.insertAdjacentHTML("beforeend", `<p class="page-desc">${escapeHtml(data.message)}</p>`);
+          }
+          renderPlaygroundImages(data.images);
         } else if (eventName === "references") {
           renderPlaygroundReferences(data.references);
         } else if (eventName === "final") {
@@ -1025,6 +1204,7 @@ function bindLogin() {
 }
 
 async function bootstrapAdmin() {
+  bindUploadDropZone();
   bindForms();
   bindDelegatedEvents();
   bindPlayground();

@@ -19,9 +19,13 @@ class ImportGraphState(TypedDict, total=False):
     file_path: str
 
     raw_text: str
+    minio_url: str
     parsed_md_path: str
+    parsed_md_minio_url: str
     parsed_image_dir: str
     parser_engine: str
+    image_records: list[dict[str, Any]]
+    image_url_map: dict[str, str]
     markdown_image_refs: list[dict[str, Any]]
     asset_warnings: list[str]
     chunks: list[dict[str, Any]]

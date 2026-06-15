@@ -46,6 +46,7 @@ def split_document_node(state: ImportGraphState) -> ImportGraphState:
         kb_id=state["kb_id"],
         filename=state["filename"],
         text=state.get("raw_text", ""),
+        image_url_map=state.get("image_url_map", {}),
         chunk_size=state.get("chunk_size", 800),
         chunk_overlap=state.get("chunk_overlap", 120),
     )
@@ -94,6 +95,8 @@ def mark_success_node(state: ImportGraphState) -> ImportGraphState:
         doc_id=state["doc_id"],
         chunk_count=state.get("chunk_count", 0),
         image_count=state.get("image_count", 0),
+        image_records=state.get("image_records", []),
+        minio_url=state.get("minio_url", ""),
     )
     return {
         **document,

@@ -56,13 +56,10 @@ def run_query_graph(
     message: str,
     business_line_id: str,
     company_id: str = "default_company",
-    use_milvus: bool = False,
-    use_llm: bool = False,
+    use_milvus: bool = True,
+    use_llm: bool = True,
 ) -> QueryGraphState:
-    """执行查询图。
-
-    默认不调用 Milvus 和 LLM，先让配置读取、检索骨架、引用整理、历史保存跑通。
-    """
+    """执行查询图。"""
     initial_state: QueryGraphState = {
         "session_id": session_id,
         "company_id": company_id,

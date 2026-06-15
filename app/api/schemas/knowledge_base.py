@@ -12,7 +12,7 @@ class KnowledgeBaseCreateRequest(BaseModel):
 
 
 class KnowledgeBaseUpdateRequest(KnowledgeBaseCreateRequest):
-    pass
+    """知识库更新请求。"""
 
 
 class KnowledgeBaseToggleRequest(BaseModel):

@@ -1,8 +1,4 @@
-"""文档文本处理工具。
-
-这里先保留最朴素的 chunk 切分逻辑，方便练习和调试。
-后续可以替换成 Markdown 标题感知切分、LangChain splitter 或 MinerU 结构化结果切分。
-"""
+"""文档文本处理工具。"""
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -12,7 +12,9 @@ from app.process.import_.agent.nodes import (
     write_milvus_node,
 )
 from app.process.import_.agent.state import ImportGraphState
+from app.process.import_.task_store import fail_import_task, finish_import_task
 from app.rag.import_ import document_import_service
+from app.shared.config.common import env_bool
 
 
 def build_import_graph():
@@ -41,16 +43,19 @@ def run_import_graph(
     doc_id: str,
     *,
     task_id: str = "",
-    run_embedding: bool = False,
-    write_milvus: bool = False,
+    run_embedding: bool | None = None,
+    write_milvus: bool | None = None,
     chunk_size: int = 800,
     chunk_overlap: int = 120,
 ) -> ImportGraphState:
-    """执行导入图。
+    """执行导入图。"""
+    if write_milvus is None:
+        write_milvus = env_bool("RAG_WRITE_MILVUS", False)
+    if run_embedding is None:
+        run_embedding = env_bool("RAG_IMPORT_EMBEDDING", bool(write_milvus))
+    if write_milvus:
+        run_embedding = True
 
-    默认不跑 embedding / Milvus，避免练习阶段每次上传都加载大模型。
-    需要真实入库时，把 run_embedding=True、write_milvus=True 打开。
-    """
     initial_state: ImportGraphState = {
         "task_id": task_id,
         "doc_id": doc_id,
@@ -61,9 +66,12 @@ def run_import_graph(
         "progress": [],
     }
     try:
-        return import_graph.invoke(initial_state)
+        state = import_graph.invoke(initial_state)
+        finish_import_task(task_id=task_id, doc_id=doc_id, state=state)
+        return state
     except Exception as exc:
         document_import_service.mark_failed(doc_id=doc_id, error=str(exc))
+        fail_import_task(task_id=task_id, doc_id=doc_id, error=str(exc))
         raise
 
 

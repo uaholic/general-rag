@@ -45,6 +45,8 @@ class MarkdownAssetService:
         parsed = urlparse(src)
         if parsed.scheme in {"http", "https"}:
             return MarkdownImageRef(src=src, kind="remote", exists_on_server=False, note="")
+        if src.startswith("/parsed-assets/"):
+            return MarkdownImageRef(src=src, kind="server_public", exists_on_server=True, note="")
         if parsed.scheme == "data":
             return MarkdownImageRef(src=src[:80], kind="data_uri", exists_on_server=False, note="发现 base64 图片，后续可抽取为对象存储文件")
         if parsed.scheme == "file":

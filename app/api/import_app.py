@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.error_handlers import install_error_handlers
 from app.api.frontend import mount_frontend
 from app.api.import_.routers import (
     auth,
@@ -33,6 +34,8 @@ def create_import_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    install_error_handlers(app)
+
     app.include_router(auth.router)
     app.include_router(dashboard.router)
     app.include_router(company.router)
@@ -47,7 +50,6 @@ def create_import_app() -> FastAPI:
 
     mount_frontend(app)
 
-    # TODO: 后续补统一异常处理，但第一版先保持简单，方便学习调试。
     @app.on_event("startup")
     async def startup() -> None:
         init_database(seed=True)

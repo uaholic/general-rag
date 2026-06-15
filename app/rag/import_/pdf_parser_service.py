@@ -302,6 +302,8 @@ class PdfParserService:
 
         zip_url = self.upload_pdf_and_poll(path)
         markdown_path = self.download_and_extract_markdown(zip_url, output_dir, path.stem)
+        if self._count_images(markdown_path.parent) == 0:
+            self._append_embedded_images_to_markdown(pdf_path=path, markdown_path=markdown_path)
         image_dir = self._guess_image_dir(markdown_path)
         markdown_text = markdown_path.read_text(encoding="utf-8")
         return PdfParseResult(
@@ -352,6 +354,28 @@ class PdfParserService:
             image_count=self._count_images(image_dir),
             engine="magic_pdf",
         )
+
+    def _append_embedded_images_to_markdown(self, *, pdf_path: Path, markdown_path: Path) -> None:
+        image_dir = markdown_path.parent / "images"
+        image_dir.mkdir(parents=True, exist_ok=True)
+        image_links: list[str] = []
+        with fitz.open(pdf_path) as pdf:
+            for page_index, page in enumerate(pdf, start=1):
+                for image_index, image in enumerate(page.get_images(full=True), start=1):
+                    xref = image[0]
+                    image_data = pdf.extract_image(xref)
+                    image_bytes = image_data.get("image")
+                    if not image_bytes:
+                        continue
+                    extension = image_data.get("ext") or "png"
+                    image_name = f"fallback_page_{page_index}_image_{image_index}.{extension}"
+                    (image_dir / image_name).write_bytes(image_bytes)
+                    image_links.append(f"![第 {page_index} 页图片 {image_index}](images/{image_name})")
+        if image_links:
+            with markdown_path.open("a", encoding="utf-8") as file:
+                file.write("\n\n## PDF 原始图片\n\n")
+                file.write("\n\n".join(image_links))
+                file.write("\n")
 
     @staticmethod
     def _guess_image_dir(markdown_path: Path) -> Path:

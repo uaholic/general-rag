@@ -65,6 +65,19 @@ def node_progress(
                 ),
             ]
             result["progress"] = progress
+            merged_state = {**dict(state), **result}
+            if merged_state.get("task_id") and merged_state.get("doc_id"):
+                try:
+                    from app.process.import_.task_store import update_import_task
+
+                    update_import_task(
+                        task_id=merged_state.get("task_id"),
+                        doc_id=merged_state.get("doc_id"),
+                        status=merged_state.get("parse_status") or "parsing",
+                        progress=progress,
+                    )
+                except Exception:
+                    pass
             return result
 
         return cast(F, wrapper)

@@ -1,9 +1,11 @@
 """文档向量生成服务。"""
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from app.infra.llm.providers import llm_provider
+from app.rag.import_.config import EMBEDDING_BATCH_SIZE
 
 
 class EmbeddingService:
@@ -14,8 +16,17 @@ class EmbeddingService:
             return {"dense": [], "sparse": []}
 
         texts = [chunk["content"] for chunk in chunks]
-        # TODO: 练习点：这里会加载 BGE-M3，首次运行较慢；可以补批量大小、重试和耗时日志。
-        return llm_provider.embed_documents(texts)
+        dense: list = []
+        sparse: list = []
+        started_at = time.perf_counter()
+        batch_size = max(1, EMBEDDING_BATCH_SIZE)
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start:start + batch_size]
+            result = llm_provider.embed_documents(batch)
+            dense.extend(result.get("dense") or [])
+            sparse.extend(result.get("sparse") or [])
+        _ = started_at
+        return {"dense": dense, "sparse": sparse}
 
     def attach_embeddings(
         self,
