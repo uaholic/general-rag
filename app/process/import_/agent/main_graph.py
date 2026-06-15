@@ -8,6 +8,7 @@ from app.process.import_.agent.nodes import (
     load_document_node,
     mark_success_node,
     parse_document_node,
+    recognize_subjects_node,
     split_document_node,
     write_milvus_node,
 )
@@ -22,6 +23,7 @@ def build_import_graph():
     graph.add_node("load_document", load_document_node)
     graph.add_node("parse_document", parse_document_node)
     graph.add_node("split_document", split_document_node)
+    graph.add_node("recognize_subjects", recognize_subjects_node)
     graph.add_node("generate_embeddings", generate_embeddings_node)
     graph.add_node("write_milvus", write_milvus_node)
     graph.add_node("mark_success", mark_success_node)
@@ -29,7 +31,8 @@ def build_import_graph():
     graph.add_edge(START, "load_document")
     graph.add_edge("load_document", "parse_document")
     graph.add_edge("parse_document", "split_document")
-    graph.add_edge("split_document", "generate_embeddings")
+    graph.add_edge("split_document", "recognize_subjects")
+    graph.add_edge("recognize_subjects", "generate_embeddings")
     graph.add_edge("generate_embeddings", "write_milvus")
     graph.add_edge("write_milvus", "mark_success")
     graph.add_edge("mark_success", END)

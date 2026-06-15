@@ -28,9 +28,14 @@ def load_bound_kbs_node(state: QueryGraphState) -> QueryGraphState:
 
 @node_progress(step="rewrite", label="改写问题", current=3, total=7)
 def rewrite_query_node(state: QueryGraphState) -> QueryGraphState:
-    rewritten_query = query_retrieval_service.rewrite_query(state["question"])
+    rewritten = query_retrieval_service.rewrite_query(
+        question=state["question"],
+        session_id=state.get("session_id", ""),
+        business_line=state.get("business_line", {}),
+        model_name=(state.get("model_config") or {}).get("llm_model_name", ""),
+    )
     return {
-        "rewritten_query": rewritten_query,
+        **rewritten,
     }
 
 
@@ -79,5 +84,6 @@ def generate_answer_node(state: QueryGraphState) -> QueryGraphState:
 
 @node_progress(step="save_history", label="保存聊天记录", current=7, total=7)
 def save_chat_history_node(state: QueryGraphState) -> QueryGraphState:
+    query_history_service.update_user_message(state)
     query_history_service.save_assistant_message(state)
     return {}

@@ -73,7 +73,7 @@ async def get_embed_code(
         raise HTTPException(status_code=404, detail="业务线不存在")
     api_base = str(request.base_url).rstrip("/")
     embed_code = (
-        f'<script src="{api_base}/static/chat-widget.js" '
+        f'<script src="{api_base}/static/chat-widget.js?v=20260615-5" '
         f'data-api-base="{api_base}" '
         'data-company-id="default_company" '
         f'data-business-line-id="{business_line_id}"></script>'

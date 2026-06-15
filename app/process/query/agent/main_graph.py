@@ -56,6 +56,7 @@ def run_query_graph(
     message: str,
     business_line_id: str,
     company_id: str = "default_company",
+    user_message_id: str = "",
     use_milvus: bool = True,
     use_llm: bool = True,
 ) -> QueryGraphState:
@@ -65,6 +66,7 @@ def run_query_graph(
         "company_id": company_id,
         "business_line_id": business_line_id,
         "question": message,
+        "user_message_id": user_message_id,
         "use_milvus": use_milvus,
         "use_llm": use_llm,
         "progress": [],

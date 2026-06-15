@@ -33,6 +33,15 @@ function escapeHtml(text) {
   })[char]);
 }
 
+function setMarkdownContent(target, text) {
+  if (!target) return;
+  if (window.RagMarkdown?.render) {
+    window.RagMarkdown.render(target, text, { imageClass: "answer-image" });
+    return;
+  }
+  target.innerHTML = escapeHtml(text || "").replace(/\n/g, "<br>");
+}
+
 function showToast(message) {
   if (!toast) return;
   toast.textContent = message;
@@ -452,16 +461,16 @@ function renderPlaygroundReferences(references) {
   }
   wrap.innerHTML = items.map((ref, index) => {
     if (typeof ref === "string") {
-      return `<div class="reference"><div class="reference-title"><span>[${index + 1}] 引用</span></div><p>${escapeHtml(ref)}</p></div>`;
+      return `<details class="reference"><summary class="reference-title"><span>[${index + 1}] 引用</span></summary><p>${escapeHtml(ref)}</p></details>`;
     }
     const title = ref.title || ref.doc_name || ref.file_name || `引用 ${index + 1}`;
     const score = ref.score == null ? "" : `score: ${ref.score}`;
     const text = ref.text || ref.content || ref.chunk || "";
     return `
-      <div class="reference">
-        <div class="reference-title"><span>[${index + 1}] ${escapeHtml(title)}</span><span>${escapeHtml(score)}</span></div>
+      <details class="reference">
+        <summary class="reference-title"><span>[${index + 1}] ${escapeHtml(title)}</span><span>${escapeHtml(score)}</span></summary>
         <p>${escapeHtml(text)}</p>
-      </div>
+      </details>
     `;
   }).join("");
 }
@@ -616,19 +625,24 @@ function renderSessionDetail(sessionId, messages, available = true, message = ""
         <span>${escapeHtml(item.created_at || "")}</span>
       </div>
       ${item.rewritten_query ? `<div class="message-meta"><span>改写问题：${escapeHtml(item.rewritten_query)}</span></div>` : ""}
-      <p>${escapeHtml(item.content || "")}</p>
+      <div class="message-content" data-message-content-index="${index}">${item.role === "assistant" ? "" : escapeHtml(item.content || "")}</div>
       ${
         (item.references || []).length
           ? `<div class="references">${item.references.map((ref, index) => `
-            <div class="reference">
-              <div class="reference-title"><span>[${index + 1}] ${escapeHtml(ref.title || ref.doc_name || ref.file_name || "引用")}</span><span>${ref.score == null ? "" : `score: ${escapeHtml(ref.score)}`}</span></div>
+            <details class="reference">
+              <summary class="reference-title"><span>[${index + 1}] ${escapeHtml(ref.title || ref.doc_name || ref.file_name || "引用")}</span><span>${ref.score == null ? "" : `score: ${escapeHtml(ref.score)}`}</span></summary>
               <p>${escapeHtml(ref.text || ref.content || ref.chunk || "")}</p>
-            </div>
+            </details>
           `).join("")}</div>`
           : ""
       }
     </div>
   `).join("");
+  messages.forEach((item, index) => {
+    if (item.role !== "assistant") return;
+    const target = $(`[data-message-content-index="${index}"]`, body);
+    setMarkdownContent(target, item.content || "");
+  });
 }
 
 async function reloadDocumentViews() {
@@ -1133,7 +1147,7 @@ function bindPlayground() {
     if (rewritten) rewritten.value = "";
     renderPlaygroundReferences([]);
     if (answer) {
-      answer.innerHTML = `<div data-playground-answer-text></div><p class="page-desc" data-playground-progress>正在连接后端...</p>`;
+      answer.innerHTML = `<div data-playground-answer-text></div><div class="playground-progress" data-playground-progress>正在连接后端...</div>`;
     }
     const answerText = $("[data-playground-answer-text]");
     const progress = $("[data-playground-progress]");
@@ -1154,12 +1168,15 @@ function bindPlayground() {
 
       await readSse(response, (eventName, data) => {
         if (eventName === "progress" && progress) {
-          progress.textContent = `${data.label || data.step || "处理中"} ${data.percent || 0}%`;
+          progress.innerHTML = `
+            <div class="document-progress-meta"><span>${escapeHtml(data.message || data.label || data.step || "处理中")}</span><span>${Number(data.percent || 0)}%</span></div>
+            <div class="document-progress-bar"><span style="width:${Math.max(0, Math.min(100, Number(data.percent || 0)))}%"></span></div>
+          `;
         } else if (eventName === "rewrite" && rewritten) {
           rewritten.value = data.rewritten_query || data.query || "";
         } else if (eventName === "delta") {
           finalAnswer += data.text || data.content || "";
-          if (answerText) answerText.textContent = finalAnswer;
+          setMarkdownContent(answerText, finalAnswer);
         } else if (eventName === "image") {
           if (data.message && answer) {
             answer.insertAdjacentHTML("beforeend", `<p class="page-desc">${escapeHtml(data.message)}</p>`);
@@ -1170,7 +1187,7 @@ function bindPlayground() {
         } else if (eventName === "final") {
           if (!finalAnswer && data.answer) {
             finalAnswer = data.answer;
-            if (answerText) answerText.textContent = finalAnswer;
+            setMarkdownContent(answerText, finalAnswer);
           }
           if (progress) progress.textContent = "完成";
         }

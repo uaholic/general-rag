@@ -294,13 +294,14 @@ class ModelConfigRepository:
     def get_default(self) -> ModelConfig:
         config = self.session.get(ModelConfig, DEFAULT_CONFIG_ID)
         default_llm_model = lm_config.llm_model or "qwen-flash"
+        default_image_model = lm_config.lv_model or "qwen-vl-flash"
         if config is None:
             config = ModelConfig(
                 id=DEFAULT_CONFIG_ID,
                 llm_model_name=default_llm_model,
                 embedding_model_name="BGE-M3",
                 rerank_model_name="BGE Reranker",
-                image_model_name="Qwen-Flash",
+                image_model_name=default_image_model,
                 top_k=5,
                 use_rerank=False,
             )
@@ -308,6 +309,9 @@ class ModelConfigRepository:
             self.session.flush()
         elif config.llm_model_name in {"", "gpt-4o-mini"} and lm_config.llm_model:
             config.llm_model_name = default_llm_model
+            self.session.flush()
+        if config.image_model_name in {"", "Qwen-Flash", "qwen-flash"}:
+            config.image_model_name = default_image_model
             self.session.flush()
         return config
 

@@ -3,6 +3,8 @@
   const apiBase = script?.dataset.apiBase || window.location.origin;
   const themeColor = script?.dataset.themeColor || "#2563eb";
   const businessLineId = script?.dataset.businessLineId || "business_line_course";
+  const scriptUrl = script?.src ? new URL(script.src, window.location.href) : null;
+  const staticBase = scriptUrl ? new URL("./", scriptUrl).href : `${(apiBase || window.location.origin).replace(/\/$/, "")}/static/`;
   const presets = {
     business_line_course: {
       name: "大模型学习助手",
@@ -126,9 +128,74 @@
     }
     .rag-widget-message.assistant img {
       max-width: 100%;
+      max-height: 260px;
+      object-fit: contain;
       border-radius: 8px;
       border: 1px solid #e8edf4;
       margin: 8px 0;
+    }
+    .rag-widget-message.assistant h1,
+    .rag-widget-message.assistant h2,
+    .rag-widget-message.assistant h3 {
+      margin: 10px 0 6px;
+      font-size: 15px;
+    }
+    .rag-widget-message.assistant h1 { font-size: 18px; }
+    .rag-widget-message.assistant h2 { font-size: 16px; }
+    .rag-widget-message.assistant p {
+      margin: 8px 0;
+    }
+    .rag-widget-message.assistant code {
+      padding: 2px 4px;
+      border-radius: 5px;
+      background: #eef2f7;
+    }
+    .rag-widget-message.assistant pre {
+      overflow: auto;
+      padding: 10px;
+      border-radius: 7px;
+      background: #101828;
+      color: #e6edf7;
+      white-space: pre-wrap;
+    }
+    .rag-widget-message.assistant ul,
+    .rag-widget-message.assistant ol {
+      margin: 8px 0 10px 20px;
+      padding: 0;
+    }
+    .rag-widget-message.assistant li {
+      margin: 4px 0;
+    }
+    .rag-widget-message.assistant table {
+      width: 100%;
+      margin: 10px 0;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .rag-widget-message.assistant th,
+    .rag-widget-message.assistant td {
+      padding: 7px 8px;
+      border: 1px solid #e8edf4;
+      text-align: left;
+      vertical-align: top;
+    }
+    .rag-widget-message.assistant th {
+      background: #f4f7fb;
+      color: #172033;
+      font-weight: 800;
+    }
+    .rag-widget-message.assistant blockquote {
+      margin: 10px 0;
+      padding: 8px 10px;
+      border-left: 3px solid ${themeColor};
+      background: #f8fbff;
+      color: #667085;
+    }
+    .rag-widget-message.assistant hr {
+      height: 1px;
+      margin: 14px 0;
+      border: 0;
+      background: #e8edf4;
     }
     .rag-widget-progress {
       margin-top: 8px;
@@ -189,6 +256,11 @@
       border: 1px solid #e8edf4;
       color: #475467;
       font-size: 12px;
+    }
+    .rag-widget-ref summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: #263247;
     }
     .rag-widget-form {
       display: grid;
@@ -270,6 +342,45 @@
     })[char]);
   }
 
+  let rendererPromise = null;
+
+  function ensureRenderer() {
+    if (window.RagMarkdown?.render) return Promise.resolve(window.RagMarkdown);
+    if (!rendererPromise) {
+      rendererPromise = new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[data-rag-widget-renderer="true"]');
+        if (existing) {
+          existing.addEventListener("load", () => resolve(window.RagMarkdown));
+          existing.addEventListener("error", reject);
+          return;
+        }
+        const tag = document.createElement("script");
+        tag.src = `${staticBase}markdown-renderer.js?v=20260615-5`;
+        tag.defer = true;
+        tag.dataset.ragWidgetRenderer = "true";
+        tag.onload = () => window.RagMarkdown?.render ? resolve(window.RagMarkdown) : reject(new Error("Markdown 渲染器未初始化"));
+        tag.onerror = () => reject(new Error("Markdown 渲染器加载失败"));
+        document.head.appendChild(tag);
+      });
+    }
+    return rendererPromise;
+  }
+
+  function setMarkdownContent(target, text) {
+    if (!target) return;
+    const token = (target._ragWidgetRenderToken || 0) + 1;
+    target._ragWidgetRenderToken = token;
+    ensureRenderer()
+      .then((renderer) => {
+        if (target._ragWidgetRenderToken !== token) return;
+        renderer.render(target, text);
+      })
+      .catch(() => {
+        if (target._ragWidgetRenderToken !== token) return;
+        target.innerHTML = escapeHtml(text || "").replace(/\n/g, "<br>");
+      });
+  }
+
   function apiUrl(path) {
     return `${(apiBase || window.location.origin).replace(/\/$/, "")}${path}`;
   }
@@ -318,11 +429,11 @@
     const refs = Array.isArray(references) ? references : [];
     if (!refs.length) return;
     target.innerHTML = refs.map((ref, index) => {
-      if (typeof ref === "string") return `<div class="rag-widget-ref">${escapeHtml(ref)}</div>`;
+      if (typeof ref === "string") return `<details class="rag-widget-ref"><summary>引用 ${index + 1}</summary>${escapeHtml(ref)}</details>`;
       const title = ref.title || ref.file_name || ref.doc_name || `引用 ${index + 1}`;
       const score = ref.score == null ? "" : ` / score: ${ref.score}`;
       const text = ref.text || ref.content || ref.chunk || "";
-      return `<div class="rag-widget-ref"><strong>${escapeHtml(title)}${escapeHtml(score)}</strong>${text ? `<div>${escapeHtml(text)}</div>` : ""}</div>`;
+      return `<details class="rag-widget-ref"><summary>${escapeHtml(title)}${escapeHtml(score)}</summary>${text ? `<div>${escapeHtml(text)}</div>` : ""}</details>`;
     }).join("");
   }
 
@@ -356,6 +467,7 @@
   }
 
   loadHistory().forEach(renderMessage);
+  ensureRenderer().catch(() => {});
 
   button.addEventListener("click", () => root.classList.add("open"));
   close.addEventListener("click", () => root.classList.remove("open"));
@@ -399,7 +511,7 @@
           updateProgress(progress, data);
         } else if (eventName === "delta") {
           answer += data.text || data.content || "";
-          answerText.textContent = answer;
+          setMarkdownContent(answerText, answer);
         } else if (eventName === "image") {
           renderImages(assistant, data);
         } else if (eventName === "references") {
@@ -407,7 +519,7 @@
         } else if (eventName === "final") {
           if (!answer && data.answer) {
             answer = data.answer;
-            answerText.textContent = answer;
+            setMarkdownContent(answerText, answer);
           }
           progress.style.display = "none";
         } else if (eventName === "error") {
@@ -418,7 +530,7 @@
     } catch (error) {
       progress.style.display = "none";
       answer = preset.answer;
-      answerText.textContent = answer;
+      setMarkdownContent(answerText, answer);
       const fallback = document.createElement("div");
       fallback.className = "rag-widget-error";
       fallback.textContent = "当前后端接口未连接，已展示本地演示回答。";

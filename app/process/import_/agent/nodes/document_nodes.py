@@ -9,13 +9,13 @@ from app.process.import_.agent.state import ImportGraphState
 from app.rag.import_ import document_import_service, embedding_service, vector_write_service
 
 
-@node_progress(step="load_document", label="读取文档记录", current=1, total=6)
+@node_progress(step="load_document", label="读取文档记录", current=1, total=7)
 def load_document_node(state: ImportGraphState) -> ImportGraphState:
     document = document_import_service.load_document(state["doc_id"])
     return {**document}
 
 
-@node_progress(step="parse_document", label="解析文档文本", current=2, total=6)
+@node_progress(step="parse_document", label="解析文档和图片", current=2, total=7)
 def parse_document_node(state: ImportGraphState) -> ImportGraphState:
     parsed = document_import_service.parse_source(
         doc_id=state["doc_id"],
@@ -29,9 +29,9 @@ def parse_document_node(state: ImportGraphState) -> ImportGraphState:
         file_path=asset_file_path,
         file_type=asset_file_type,
     )
-    message = f"解析文档文本，解析器：{parsed.get('parser_engine', 'text')}"
+    message = f"解析文档和图片，解析器：{parsed.get('parser_engine', 'text')}"
     if asset_report.get("asset_warnings"):
-        message = "解析文档文本，发现图片引用请检查资源上传"
+        message = "解析文档和图片，发现图片引用请检查资源上传"
     return {
         **parsed,
         **asset_report,
@@ -39,7 +39,7 @@ def parse_document_node(state: ImportGraphState) -> ImportGraphState:
     }
 
 
-@node_progress(step="split_document", label="切分 chunk", current=3, total=6)
+@node_progress(step="split_document", label="切分 chunk", current=3, total=7)
 def split_document_node(state: ImportGraphState) -> ImportGraphState:
     chunks = document_import_service.split_text(
         doc_id=state["doc_id"],
@@ -56,7 +56,18 @@ def split_document_node(state: ImportGraphState) -> ImportGraphState:
     }
 
 
-@node_progress(step="generate_embeddings", label="向量生成", current=4, total=6)
+@node_progress(step="recognize_subjects", label="识别主体", current=4, total=7)
+def recognize_subjects_node(state: ImportGraphState) -> ImportGraphState:
+    chunks = document_import_service.recognize_chunk_subjects(state.get("chunks", []))
+    subject_count = len({name for chunk in chunks for name in chunk.get("subject_names", [])})
+    return {
+        "chunks": chunks,
+        "chunk_count": len(chunks),
+        "_progress_message": f"识别到 {subject_count} 个主体词",
+    }
+
+
+@node_progress(step="generate_embeddings", label="向量生成", current=5, total=7)
 def generate_embeddings_node(state: ImportGraphState) -> ImportGraphState:
     if not state.get("run_embedding", False):
         return {
@@ -74,7 +85,7 @@ def generate_embeddings_node(state: ImportGraphState) -> ImportGraphState:
     }
 
 
-@node_progress(step="write_milvus", label="写入 Milvus", current=5, total=6)
+@node_progress(step="write_milvus", label="写入 Milvus", current=6, total=7)
 def write_milvus_node(state: ImportGraphState) -> ImportGraphState:
     if not state.get("write_milvus", False):
         return {
@@ -89,7 +100,7 @@ def write_milvus_node(state: ImportGraphState) -> ImportGraphState:
     }
 
 
-@node_progress(step="finish", label="导入完成", current=6, total=6)
+@node_progress(step="finish", label="导入完成", current=7, total=7)
 def mark_success_node(state: ImportGraphState) -> ImportGraphState:
     document = document_import_service.mark_success(
         doc_id=state["doc_id"],

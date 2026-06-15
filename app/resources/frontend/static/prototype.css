@@ -885,6 +885,103 @@ pre {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   background: #fff;
+  line-height: 1.7;
+}
+
+.answer-box h1,
+.answer-box h2,
+.answer-box h3 {
+  margin: 12px 0 8px;
+  font-size: 16px;
+}
+
+.answer-box h1 {
+  font-size: 19px;
+}
+
+.answer-box h2 {
+  font-size: 17px;
+}
+
+.answer-box p {
+  margin: 8px 0;
+}
+
+.answer-box code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: #eef2f7;
+}
+
+.markdown-code {
+  margin: 10px 0;
+  white-space: pre-wrap;
+}
+
+.answer-box ul,
+.answer-box ol {
+  margin: 8px 0 10px 22px;
+  padding: 0;
+}
+
+.answer-box li {
+  margin: 4px 0;
+}
+
+.answer-box table {
+  width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.answer-box th,
+.answer-box td {
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  text-align: left;
+  vertical-align: top;
+}
+
+.answer-box th {
+  background: #f4f7fb;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.answer-box blockquote {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--brand);
+  background: #f8fbff;
+  color: var(--muted);
+}
+
+.answer-box hr {
+  height: 1px;
+  margin: 14px 0;
+  border: 0;
+  background: var(--line-soft);
+}
+
+.answer-image {
+  display: block;
+  max-width: min(100%, 420px);
+  max-height: 280px;
+  margin: 10px 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  object-fit: contain;
+}
+
+.playground-progress {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid #dbe6f5;
+  border-radius: 7px;
+  background: #f8fbff;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .references {
@@ -904,8 +1001,12 @@ pre {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 6px;
   font-weight: 700;
+  cursor: pointer;
+}
+
+.reference[open] .reference-title {
+  margin-bottom: 6px;
 }
 
 .image-row {
@@ -945,6 +1046,28 @@ pre {
   margin-bottom: 8px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.message-content {
+  line-height: 1.7;
+}
+
+.message-content p {
+  margin: 8px 0;
+}
+
+.message-content table {
+  width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.message-content th,
+.message-content td {
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  text-align: left;
 }
 
 .modal-backdrop {

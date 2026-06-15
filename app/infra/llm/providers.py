@@ -11,7 +11,7 @@ class LLMProvider:
     def vision_chat(self, model_name: str | None = None):
         from app.shared.model.lm_utils import get_llm_client
 
-        return get_llm_client(model_name or infra_config.llm.lv_model)
+        return get_llm_client(model_name or infra_config.llm.lv_model or "qwen-vl-flash")
 
     def embedding_model(self):
         from app.shared.model.embedding_utils import get_bge_m3_ef

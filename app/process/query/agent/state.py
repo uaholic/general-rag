@@ -9,6 +9,7 @@ class QueryGraphState(TypedDict, total=False):
     company_id: str
     business_line_id: str
     question: str
+    user_message_id: str
 
     company_config: dict[str, Any]
     model_config: dict[str, Any]
@@ -16,6 +17,7 @@ class QueryGraphState(TypedDict, total=False):
     kb_ids: list[str]
 
     rewritten_query: str
+    query_subject_names: list[str]
     retrieved_chunks: list[dict[str, Any]]
     reranked_chunks: list[dict[str, Any]]
     references: list[dict[str, Any]]
